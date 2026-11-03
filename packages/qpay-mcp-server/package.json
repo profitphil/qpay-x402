@@ -1,0 +1,40 @@
+{
+  "name": "qpay-mcp-server",
+  "version": "0.2.1",
+  "description": "MCP server that lets AI assistants pay x402 endpoints in Qubic (QU) through Q+Pay, with spending limits enforced in the server.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "x402",
+    "qubic",
+    "agent-payments",
+    "micropayments",
+    "http-402"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "bin": {
+    "qpay-mcp-server": "bin/qpay-mcp-server.js"
+  },
+  "files": [
+    "index.js",
+    "bin/",
+    "src/",
+    "vendor/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.3"
+  },
+  "homepage": "https://useqpay.com",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@qubic-lib/qubic-ts-library": "^0.1.6",
+    "zod": "^4.2.0"
+  },
+  "bugs": {
+    "url": "https://useqpay.com"
+  },
+  "author": "Q+Pay LLC"
+}

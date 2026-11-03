@@ -1,0 +1,44 @@
+{
+  "name": "qubic-x402-paywall",
+  "version": "0.2.0",
+  "description": "Charge per HTTP request in Qubic (QU). Implements the x402 seller side against the Q+Pay facilitator: 402 challenges, anti-front-running tickets, and QPAY contract settlement.",
+  "keywords": [
+    "x402",
+    "qubic",
+    "paywall",
+    "micropayments",
+    "http-402",
+    "agent-payments",
+    "pay-per-request"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "homepage": "https://useqpay.com",
+  "devDependencies": {
+    "express": "^4.19.2"
+  },
+  "peerDependencies": {
+    "express": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "bugs": {
+    "url": "https://useqpay.com"
+  },
+  "author": "Q+Pay LLC"
+}

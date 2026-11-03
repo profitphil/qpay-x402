@@ -1,0 +1,41 @@
+{
+  "name": "x402-qubic",
+  "version": "0.2.1",
+  "description": "Qubic (QU) payment scheme for the official x402 v2 SDK: buyers on @x402/fetch, @x402/axios or any x402Client pay qubic:mainnet endpoints, and sellers on @x402/express charge in QU through the Q+Pay facilitator.",
+  "keywords": [
+    "x402",
+    "qubic",
+    "x402-scheme",
+    "agent-payments",
+    "micropayments",
+    "http-402"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "homepage": "https://useqpay.com/docs/x402",
+  "peerDependencies": {
+    "@x402/core": "^2.28.0",
+    "@qubic-lib/qubic-ts-library": "^0.1.6"
+  },
+  "bugs": {
+    "url": "https://useqpay.com"
+  },
+  "author": "Q+Pay LLC",
+  "peerDependenciesMeta": {
+    "@qubic-lib/qubic-ts-library": {
+      "optional": true
+    }
+  }
+}

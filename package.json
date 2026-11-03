@@ -1,0 +1,12 @@
+{
+  "name": "qpay-x402-packages",
+  "private": true,
+  "description": "Q+Pay's open-source x402 packages for Qubic (QU)",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present"
+  }
+}
