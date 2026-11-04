@@ -91,8 +91,9 @@ const res = await channelFetch("https://api.example.com/feed");
 ```
 
 - The deposit is paid through `ExactQubicScheme`, so it gets every check above, and follows `extra.settlement` (a contract `Pay` only to the QPAY contract, a plain transfer under `"direct"`).
-- **A deposit belongs to the seller once paid**; unused credit comes back only if the seller refunds it. `maxTotalDeposits` caps all deposits over the client's life and defaults to `maxDeposit`, one deposit's worth; raise it to allow top-ups.
+- **A deposit belongs to the seller once paid**; unused credit comes back only if the seller refunds it. `maxTotalDeposits` caps all deposits over the client's life and defaults to `maxDeposit`, one deposit's worth; raise it to allow top-ups. A deposit refused before signing, or dropped by the network, does not count against it; one that may still land (`confirm_timeout`) does.
 - Balances are read from the network's Q+Pay facilitator only (or `balanceUrl`), never from a URL in the seller's offer, and a seller's 402 never triggers a deposit on its own say-so.
+- An offer whose deposit is below its price is refused before paying.
 - A 402 without a channel offer is returned untouched, so you can hand it to `wrapFetchWithPayment`.
 - Refusals throw a `ChannelError` with a `code` (`limit_deposit`, `limit_total`, `limit_per_call`, `untrusted_balance_url`, `voucher_exceeds_deposit`, ...).
 

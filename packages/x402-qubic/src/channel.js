@@ -33,6 +33,8 @@ const { ExactQubicScheme, QUBIC_MAINNET, QUBIC_SANDBOX, identityToBytes } = requ
 const CHANNEL_RESOURCE_ID = "channel:open";
 const OPEN_HEADER = "X-CHANNEL-OPEN";
 const VOUCHER_HEADER = "X-CHANNEL-VOUCHER";
+// Deposit failures after which it is certain no QU moved.
+const NOTHING_PAID_CODES = new Set(["payment_dropped", "payment_not_executed"]);
 const BALANCE_URLS = {
   [QUBIC_MAINNET]: "https://useqpay.com/facilitator/channel",
   [QUBIC_SANDBOX]: "https://sandbox.useqpay.com/facilitator/channel",
@@ -65,11 +67,15 @@ function readOffer(body, network, balanceUrl) {
   if (req.scheme !== "exact" || req.network !== network || req.asset !== "QUBIC") {
     throw new ChannelError(`The channel offer is not a QU payment on ${network}; nothing was paid`, "unsupported_requirements");
   }
-  if (offer.balanceUrl !== balanceUrl) {
+  if (String(offer.balanceUrl || "").replace(/\/$/, "") !== balanceUrl) {
     throw new ChannelError(`The channel offer points to ${offer.balanceUrl}, not the facilitator ${balanceUrl}; nothing was paid`, "untrusted_balance_url");
   }
   if (!isWholeQu(offer.price) || !isWholeQu(offer.deposit) || String(req.amount) !== String(offer.deposit)) {
     throw new ChannelError("The channel offer's price or deposit is invalid; nothing was paid", "invalid_offer");
+  }
+  // A deposit smaller than the price would be paid with no voucher able to use it.
+  if (BigInt(offer.deposit) < BigInt(offer.price)) {
+    throw new ChannelError(`The channel deposit (${offer.deposit} QU) is below the price (${offer.price} QU); nothing was paid`, "invalid_offer");
   }
   if (extra.resourceId !== CHANNEL_RESOURCE_ID) throw new ChannelError(`The deposit is not for "${CHANNEL_RESOURCE_ID}"; nothing was paid`, "invalid_offer");
   if (!identityToBytes(extra.sellerId)) throw new ChannelError(`Seller id ${extra.sellerId} is not a Qubic identity`, "invalid_seller");
@@ -109,7 +115,7 @@ function createChannelFetch(opts = {}) {
   const maxTotalDeposits = BigInt(opts.maxTotalDeposits ?? opts.maxDeposit);
   const balanceUrl = (opts.balanceUrl || BALANCE_URLS[network] || "").replace(/\/$/, "");
   if (!balanceUrl) throw new ChannelError(`No facilitator balance URL known for ${network}; pass balanceUrl`, "balance_url_required");
-  const scheme = new ExactQubicScheme({ ...schemeOptions, signer, network, ...(rpcUrl ? { rpcUrl } : {}), ...(opts.fetch ? { fetch: opts.fetch } : {}) });
+  const schemeConfig = { ...schemeOptions, network, ...(rpcUrl ? { rpcUrl } : {}), ...(opts.fetch ? { fetch: opts.fetch } : {}) };
 
   let totalDeposits = 0n;
   // channelId -> { header, amount }: a paid deposit not yet accepted, sent again rather than paid twice.
@@ -131,10 +137,21 @@ function createChannelFetch(opts = {}) {
     if (totalDeposits + offer.deposit > maxTotalDeposits) {
       throw new ChannelError(`Another deposit of ${offer.deposit} QU would pass maxTotalDeposits (${maxTotalDeposits} QU); nothing was paid`, "limit_total");
     }
-    // Reserved before paying: a failure after signing must not free room for a second deposit.
+    // Reserved before paying, so two calls at once cannot both fit under the cap.
     totalDeposits += offer.deposit;
-    const { x402Version, payload } = await scheme.createPaymentPayload(2, offer.requirements, { maxAmountPerPayment: offer.deposit.toString() });
-    return { header: b64({ x402Version, accepted: offer.requirements, payload }), amount: offer.deposit };
+    // Tells a refusal before signing from a failure after the transaction was sent.
+    let sent = false;
+    const tracked = { address: () => signer.address(), send: (tx) => ((sent = true), signer.send(tx)) };
+    const scheme = new ExactQubicScheme({ ...schemeConfig, signer: tracked });
+    try {
+      const { x402Version, payload } = await scheme.createPaymentPayload(2, offer.requirements, { maxAmountPerPayment: offer.deposit.toString() });
+      return { header: b64({ x402Version, accepted: offer.requirements, payload }), amount: offer.deposit };
+    } catch (err) {
+      // Given back only when no QU can have moved; a confirm_timeout or a failed
+      // broadcast may still land, so it stays counted.
+      if (!sent || NOTHING_PAID_CODES.has(err && err.code)) totalDeposits -= offer.deposit;
+      throw err;
+    }
   }
 
   async function signVoucher(channelId, cumulative) {

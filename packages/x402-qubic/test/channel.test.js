@@ -47,6 +47,7 @@ async function setup(scenario = {}) {
   let pendingOpen = scenario.pendingOpen ?? 0;
   let txs = 0;
   let balanceReads = 0;
+  let offers = 0;
 
   const offer = () => ({
     deposit,
@@ -56,7 +57,8 @@ async function setup(scenario = {}) {
       network: QUBIC_SANDBOX,
       amount: deposit,
       asset: "QUBIC",
-      payTo: scenario.payTo ?? (settlement === "contract" ? QPAY_CONTRACT_ADDRESS : seller),
+      // The first `badOffers` offers ask for a contract deposit to another address.
+      payTo: offers++ < (scenario.badOffers ?? 0) ? seller : scenario.payTo ?? (settlement === "contract" ? QPAY_CONTRACT_ADDRESS : seller),
       maxTimeoutSeconds: 120,
       extra: { sellerId: seller, resourceId: "channel:open", settlement },
     },
@@ -67,7 +69,14 @@ async function setup(scenario = {}) {
   const net = async (input, init = {}) => {
     const url = new URL(String(input));
     if (url.pathname === "/rpc/v1/tick-info") return json(200, { tickInfo: { tick: 1000 } });
-    if (url.pathname.startsWith("/rpc/v2/transactions/")) return json(200, {});
+    // "drop-first": the first deposit never makes it on chain, and the indexer is past its tick.
+    // "stuck": no deposit ever shows up, and the indexer does not say how far it is.
+    if (url.pathname === "/rpc/v1/status" && scenario.chain === "drop-first") return json(200, { lastProcessedTick: { tickNumber: 5000 } });
+    if (url.pathname.startsWith("/rpc/v2/transactions/")) {
+      const id = url.pathname.split("/").pop();
+      if (scenario.chain === "stuck" || (scenario.chain === "drop-first" && id === "tx1")) return new Response("", { status: 404 });
+      return json(200, {});
+    }
     if (url.pathname.startsWith("/rpc/v1/tx-status/")) return json(200, { transactionStatus: { moneyFlew: true } });
     if (`${url.origin}${url.pathname}`.startsWith(`${BALANCE_URL}/`)) {
       assert.equal(decodeURIComponent(url.pathname.split("/").pop()), channelId);
@@ -168,6 +177,38 @@ test("pays at most maxTotalDeposits over the client's life (one deposit by defau
   const topUps = await setup({ maxTotalDeposits: 20000 });
   for (let i = 0; i < 11; i++) await topUps.channelFetch(URL_API);
   assert.equal(topUps.sent.length, 2);
+});
+
+test("a deposit refused before signing does not use up the allowance", async () => {
+  const { channelFetch, sent } = await setup({ settlement: "contract", badOffers: 1 });
+  await assert.rejects(channelFetch(URL_API), { code: "unknown_contract" });
+  assert.equal(sent.length, 0);
+  // Still room for the one default deposit.
+  assert.equal((await channelFetch(URL_API)).status, 200);
+  assert.equal(sent.length, 1);
+});
+
+test("a dropped deposit gives the allowance back; one that may still land keeps it", async () => {
+  const dropped = await setup({ chain: "drop-first" });
+  await assert.rejects(dropped.channelFetch(URL_API), { code: "payment_dropped" });
+  assert.equal((await dropped.channelFetch(URL_API)).status, 200);
+  assert.equal(dropped.sent.length, 2);
+
+  const stuck = await setup({ chain: "stuck" });
+  await assert.rejects(stuck.channelFetch(URL_API), { code: "confirm_timeout" });
+  await assert.rejects(stuck.channelFetch(URL_API), { code: "limit_total" });
+  assert.equal(stuck.sent.length, 1);
+});
+
+test("refuses an offer whose deposit is below the price, before paying", async () => {
+  const { channelFetch, sent } = await setup({ deposit: "500", price: "1000" });
+  await assert.rejects(channelFetch(URL_API), { code: "invalid_offer" });
+  assert.equal(sent.length, 0);
+});
+
+test("accepts the facilitator's balance URL with a trailing slash", async () => {
+  const { channelFetch } = await setup({ balanceUrl: `${BALANCE_URL}/` });
+  assert.equal((await channelFetch(URL_API)).status, 200);
 });
 
 test("ignores an offer whose balance URL is not the facilitator's", async () => {
