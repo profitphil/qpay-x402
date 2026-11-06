@@ -4,8 +4,12 @@
 // balance: use a wallet funded only with what you mean to spend, and set the
 // x402 client's spend controls (allowedAssets[].maxAmountPerPayment).
 //
-// Any object with the same two methods works as a signer - a hardware or
+// Any object with the same methods works as a signer - a hardware or
 // custodial signer, a test double - so the seed never has to be here.
+// signVoucher() is only needed for prepaid channels (createChannelFetch).
+
+// A voucher for one of this wallet's own channels: channel:<buyer>:<seller>:<total>.
+const VOUCHER_MESSAGE = /^channel:([A-Z]{60}):[A-Z]{60}:[1-9][0-9]*$/;
 
 function seedSigner(seed, { rpcUrl = "https://rpc.qubic.org" } = {}) {
   if (typeof seed !== "string" || !/^[a-z]{55}$/.test(seed)) throw new Error("seedSigner needs a Qubic seed: 55 lowercase letters a-z");
@@ -16,7 +20,9 @@ function seedSigner(seed, { rpcUrl = "https://rpc.qubic.org" } = {}) {
       const { QubicHelper } = require("@qubic-lib/qubic-ts-library/dist/qubicHelper");
       const { QubicTransaction } = require("@qubic-lib/qubic-ts-library/dist/qubic-types/QubicTransaction");
       const { DynamicPayload } = require("@qubic-lib/qubic-ts-library/dist/qubic-types/DynamicPayload");
-      libs = { helper: new QubicHelper(), QubicTransaction, DynamicPayload };
+      const { KeyHelper } = require("@qubic-lib/qubic-ts-library/dist/keyHelper");
+      const { default: crypto } = require("@qubic-lib/qubic-ts-library/dist/crypto");
+      libs = { helper: new QubicHelper(), QubicTransaction, DynamicPayload, KeyHelper, crypto };
     }
     return libs;
   };
@@ -51,6 +57,23 @@ function seedSigner(seed, { rpcUrl = "https://rpc.qubic.org" } = {}) {
       });
       if (!res.ok) throw new Error(`broadcast failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
       return tx.getId();
+    },
+    /**
+     * Signs a prepaid-channel voucher: SchnorrQ over the KangarooTwelve-256
+     * digest of the message, as 128 hex characters. Refuses anything that is
+     * not a voucher for one of this wallet's own channels, so this method
+     * cannot be used to sign arbitrary data with the key.
+     */
+    async signVoucher(message) {
+      const { publicId } = await identity();
+      const m = VOUCHER_MESSAGE.exec(String(message));
+      if (!m || m[1] !== publicId) throw new Error("signVoucher only signs channel:<this wallet>:<seller>:<total>");
+      const { helper, KeyHelper, crypto } = load();
+      const { schnorrq, K12 } = await crypto;
+      const digest = new Uint8Array(32);
+      K12(Buffer.from(message, "utf8"), digest, 32);
+      const privateKey = new KeyHelper().privateKey(seed, 0, K12);
+      return Buffer.from(schnorrq.sign(privateKey, helper.getIdentityBytes(publicId), digest)).toString("hex");
     },
   };
 }

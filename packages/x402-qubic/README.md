@@ -73,7 +73,29 @@ If the network never executes the transaction, the payment fails with `payment_d
 
 ## Signers
 
-`seedSigner(seed)` holds a Qubic seed and spends from it on its own. Anything holding the seed can move the whole balance, so use a wallet funded with only what you mean to spend. Any object with `address()` and `send({ to, amount, inputType, input, tick })` returning a transaction id can stand in for it: a hardware signer, a custodial service or a test double.
+`seedSigner(seed)` holds a Qubic seed and spends from it on its own. Anything holding the seed can move the whole balance, so use a wallet funded with only what you mean to spend. Any object with `address()` and `send({ to, amount, inputType, input, tick })` returning a transaction id can stand in for it: a hardware signer, a custodial service or a test double. For prepaid channels it also needs `signVoucher(message)`, returning the 128-hex SchnorrQ signature; `seedSigner` signs only vouchers for its own channels (`channel:<this wallet>:<seller>:<total>`).
+
+## Prepaid channels
+
+For an agent calling the same seller over and over, a [prepaid channel](https://useqpay.com/docs/x402#prepaid-channels) pays one deposit, then each call with a voucher signed locally: no transaction, no wait, no fee per call.
+
+```js
+const { createChannelFetch, seedSigner } = require("x402-qubic");
+
+const channelFetch = createChannelFetch({
+  signer: seedSigner(process.env.QUBIC_SEED),
+  maxDeposit: 100000,    // QU; a bigger deposit is refused before anything is signed
+  maxPricePerCall: 1000, // QU
+});
+const res = await channelFetch("https://api.example.com/feed");
+```
+
+- The deposit is paid through `ExactQubicScheme`, so it gets every check above, and follows `extra.settlement` (a contract `Pay` only to the QPAY contract, a plain transfer under `"direct"`).
+- **A deposit belongs to the seller once paid**; unused credit comes back only if the seller refunds it. `maxTotalDeposits` caps all deposits over the client's life and defaults to `maxDeposit`, one deposit's worth; raise it to allow top-ups. A deposit refused before signing, or dropped by the network, does not count against it; one that may still land (`confirm_timeout`) does.
+- Balances are read from the network's Q+Pay facilitator only (or `balanceUrl`), never from a URL in the seller's offer, and a seller's 402 never triggers a deposit on its own say-so.
+- An offer whose deposit is below its price is refused before paying.
+- A 402 without a channel offer is returned untouched, so you can hand it to `wrapFetchWithPayment`.
+- Refusals throw a `ChannelError` with a `code` (`limit_deposit`, `limit_total`, `limit_per_call`, `untrusted_balance_url`, `voucher_exceeds_deposit`, ...).
 
 ## Options
 
