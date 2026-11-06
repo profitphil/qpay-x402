@@ -27,6 +27,10 @@ const QUBIC_MAINNET = "qubic:mainnet";
 // The emulated network of sandbox.useqpay.com: no real QU. Use it with that
 // sandbox's RPC, rpcUrl "https://sandbox.useqpay.com/rpc".
 const QUBIC_SANDBOX = "qubic:sandbox";
+// Each network's Qubic RPC. A sandbox scheme left on the mainnet RPC would
+// read mainnet's tick, and a signer on mainnet could then pay real QU to a
+// sandbox seller's address.
+const RPC_URLS = { [QUBIC_MAINNET]: "https://rpc.qubic.org", [QUBIC_SANDBOX]: "https://sandbox.useqpay.com/rpc" };
 // QPAY (QPAYHUB), Qubic contract index 29.
 const QPAY_CONTRACT_ADDRESS = "DBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHQAH";
 const PROC_PAY = 1;
@@ -74,7 +78,7 @@ class ExactQubicScheme {
   /**
    * @param {object} opts
    * @param {object} opts.signer           { address(): Promise<string>, send({ to, amount, inputType, input, tick }): Promise<txId> } - see seedSigner()
-   * @param {string} [opts.rpcUrl]         Qubic RPC, for the current tick and confirmation
+   * @param {string} [opts.rpcUrl]         Qubic RPC, for the current tick and confirmation (default: the network's)
    * @param {string} [opts.network]        qubic:mainnet (default) or qubic:sandbox; options on any other network are refused
    * @param {number} [opts.tickOffset]     how far ahead to target (ticks are ~0.5 s apart)
    * @param {number} [opts.confirmTimeoutMs] how long to wait for the network to execute the payment
@@ -82,13 +86,16 @@ class ExactQubicScheme {
    * @param {string[]} [opts.contractAddresses] addresses accepted as payTo under contract settlement
    * @param {Function} [opts.fetch]
    */
-  constructor({ signer, rpcUrl = "https://rpc.qubic.org", network = QUBIC_MAINNET, tickOffset = 30, confirmTimeoutMs = 90_000, pollMs = 2000, contractAddresses = [QPAY_CONTRACT_ADDRESS], fetch: fetchImpl } = {}) {
+  constructor({ signer, rpcUrl, network = QUBIC_MAINNET, tickOffset = 30, confirmTimeoutMs = 90_000, pollMs = 2000, contractAddresses = [QPAY_CONTRACT_ADDRESS], fetch: fetchImpl } = {}) {
     if (!signer || typeof signer.send !== "function") throw new Error("ExactQubicScheme needs a signer (see seedSigner)");
     if (network !== QUBIC_MAINNET && network !== QUBIC_SANDBOX) throw new Error(`ExactQubicScheme network must be ${QUBIC_MAINNET} or ${QUBIC_SANDBOX}`);
     this.scheme = "exact";
     this.network = network;
     this.signer = signer;
-    this.rpcUrl = rpcUrl.replace(/\/$/, "");
+    this.rpcUrl = (rpcUrl || RPC_URLS[network]).replace(/\/$/, "");
+    if (network === QUBIC_SANDBOX && this.rpcUrl === RPC_URLS[QUBIC_MAINNET]) {
+      throw new Error("A qubic:sandbox scheme cannot use the mainnet RPC; leave rpcUrl out or use https://sandbox.useqpay.com/rpc");
+    }
     this.tickOffset = tickOffset;
     this.confirmTimeoutMs = confirmTimeoutMs;
     this.pollMs = pollMs;

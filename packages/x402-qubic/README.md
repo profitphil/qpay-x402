@@ -99,7 +99,7 @@ const res = await channelFetch("https://api.example.com/feed");
 
 ## Options
 
-`new ExactQubicScheme({ signer, rpcUrl, network, tickOffset, confirmTimeoutMs, pollMs, contractAddresses })`: Qubic RPC (default `https://rpc.qubic.org`), the network it pays on (default `QUBIC_MAINNET`; options on any other network are refused), ticks to target ahead (default 30, about 15 s), how long to wait for execution (default 90 s), and the addresses accepted as `payTo` under contract settlement. `ExactQubicServerScheme` takes `network` too.
+`new ExactQubicScheme({ signer, rpcUrl, network, tickOffset, confirmTimeoutMs, pollMs, contractAddresses })`: Qubic RPC (default: the network's, `https://rpc.qubic.org` or `https://sandbox.useqpay.com/rpc`; a sandbox scheme refuses the mainnet RPC), the network it pays on (default `QUBIC_MAINNET`; options on any other network are refused), ticks to target ahead (default 30, about 15 s), how long to wait for execution (default 90 s), and the addresses accepted as `payTo` under contract settlement. `ExactQubicServerScheme` takes `network` too.
 
 ## Sandbox
 

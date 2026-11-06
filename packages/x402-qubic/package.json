@@ -1,6 +1,6 @@
 {
   "name": "x402-qubic",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Qubic (QU) payment scheme for the official x402 v2 SDK: buyers on @x402/fetch, @x402/axios or any x402Client pay qubic:mainnet endpoints, and sellers on @x402/express charge in QU through the Q+Pay facilitator.",
   "keywords": [
     "x402",

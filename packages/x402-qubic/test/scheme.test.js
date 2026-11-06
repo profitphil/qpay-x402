@@ -9,7 +9,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const http = require("http");
 const crypto = require("crypto");
-const { ExactQubicScheme, QUBIC_MAINNET, QPAY_CONTRACT_ADDRESS } = require("..");
+const { ExactQubicScheme, QUBIC_MAINNET, QUBIC_SANDBOX, QPAY_CONTRACT_ADDRESS } = require("..");
 const { identityToBytes } = require("../src/scheme");
 
 const SELLER = "QPAYNOWSWZMGHFEAEVJXGZAVSHABAZDDBDIHTEBOPCOGHRGBCYCUZOHCVLXG";
@@ -141,4 +141,13 @@ test("an indexer that does not report its progress never makes a payment dropped
 test("a payment that executed but moved no QU fails without sending proof", async () => {
   rpc.moneyFlew = false;
   await assert.rejects(pay(signer(), option()), refused("payment_not_executed"));
+});
+
+// --- The RPC follows the network ------------------------------------------------------
+
+test("a sandbox scheme defaults to the sandbox's RPC and refuses mainnet's", () => {
+  const sig = signer();
+  assert.strictEqual(new ExactQubicScheme({ signer: sig }).rpcUrl, "https://rpc.qubic.org");
+  assert.strictEqual(new ExactQubicScheme({ signer: sig, network: QUBIC_SANDBOX }).rpcUrl, "https://sandbox.useqpay.com/rpc");
+  assert.throws(() => new ExactQubicScheme({ signer: sig, network: QUBIC_SANDBOX, rpcUrl: "https://rpc.qubic.org/" }), /mainnet RPC/);
 });
