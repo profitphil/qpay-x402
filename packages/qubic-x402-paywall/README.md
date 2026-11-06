@@ -516,7 +516,10 @@ mainnet), facilitator, invoices, checkout and webhooks.
   caught up, since executed transactions are visible at once.
 - **Test sellers:** `https://sandbox.useqpay.com/x402/demo/prepaid` (1,000 QU,
   also offers a prepaid channel), `/api/article/content` and
-  `/resource/qdoge-feed` answer 402 on `qubic:sandbox`.
+  `/resource/qdoge-feed` answer 402 on `qubic:sandbox`, all for one seller.
+  `/x402/demo/second-seller` (2,500 QU, or a 25,000 QU channel) is a
+  different seller with its own seller id, for testing what a buyer does
+  with a seller it has never paid.
 - **Ticks** advance every 500 ms, about mainnet's pace, and a transaction
   executes when its tick arrives, so tick margins and "not on chain yet"
   retries behave as on mainnet.
