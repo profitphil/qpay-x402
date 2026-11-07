@@ -20,6 +20,7 @@ const { ExactQubicScheme, QUBIC_MAINNET, QUBIC_SANDBOX, QPAY_CONTRACT_ADDRESS } 
 const { seedSigner } = require("./src/signer");
 const { ExactQubicServerScheme } = require("./src/server");
 const { createChannelFetch, ChannelError } = require("./src/channel");
+const { qpayDirectoryListing, announceListing, DIRECTORY_CATEGORIES } = require("./src/directory");
 
 module.exports = {
   ExactQubicScheme,
@@ -27,6 +28,9 @@ module.exports = {
   seedSigner,
   createChannelFetch,
   ChannelError,
+  qpayDirectoryListing,
+  announceListing,
+  DIRECTORY_CATEGORIES,
   QUBIC_MAINNET,
   QUBIC_SANDBOX,
   QPAY_CONTRACT_ADDRESS,

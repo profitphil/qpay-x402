@@ -77,6 +77,26 @@ function createClient({ url = process.env.QPAY_FACILITATOR_URL || DEFAULT_URL, t
 
     /** Prepaid channel: spends one request's price from a channel. The
      *  request must be signed with your ticket key - see redeemAuth. */
+    /** Q+Pay Directory: asks the facilitator to check a listed route. It
+     *  answers with the listing's status; nothing is listed on trust. */
+    async announce(url) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(`${base}/discovery/announce`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: ctrl.signal,
+        });
+        const body = await res.json().catch(() => null);
+        if (body && typeof body.status === "string") return body;
+        throw new Error(`facilitator /discovery/announce: HTTP ${res.status}`);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
     redeemVoucher: ({ channelId, sellerId, price, cumulativeAmount, signature, sellerAuth }) =>
       postReadingRefusals("/channel/redeem", { channelId, sellerId, price: String(price), cumulativeAmount: String(cumulativeAmount), signature, sellerAuth }),
   };

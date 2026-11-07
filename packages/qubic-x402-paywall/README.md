@@ -350,9 +350,11 @@ ticket, settles the payment and populates `req.payment`.
 | `facilitator` | Q+Pay's | `{ url }` if you run your own |
 | `channel` | — | `{ deposit }` to also offer a prepaid channel — see below |
 | `network` | the facilitator's | `qubic:mainnet`, or `qubic:sandbox` on the sandbox — see below |
+| `discovery` | — | `{ category, tags, output: { example }, url }` to list the route in the Q+Pay Directory — see below |
 
 Also exported: `issueTicket`, `verifyTicket`, `readNonce`, `createClient`,
-`resolvePayTo` — for building the flow by hand.
+`resolvePayTo`, `listingSignature`, `DIRECTORY_CATEGORIES` — for building
+the flow by hand.
 
 **Zero runtime dependencies.** Node 18+ (it uses the built-in `fetch`).
 
@@ -519,7 +521,8 @@ mainnet), facilitator, invoices, checkout and webhooks.
   `/resource/qdoge-feed` answer 402 on `qubic:sandbox`, all for one seller.
   `/x402/demo/second-seller` (2,500 QU, or a 25,000 QU channel) is a
   different seller with its own seller id, for testing what a buyer does
-  with a seller it has never paid.
+  with a seller it has never paid. All four are listed in the sandbox's
+  [directory](#the-qpay-directory).
 - **Ticks** advance every 500 ms, about mainnet's pace, and a transaction
   executes when its tick arrives, so tick margins and "not on chain yet"
   retries behave as on mainnet.
@@ -538,6 +541,140 @@ new x402Client().register(QUBIC_SANDBOX,
   new ExactQubicScheme({ signer: seedSigner(seed, { rpcUrl }), rpcUrl, network: QUBIC_SANDBOX }));
 ```
 
+## The Q+Pay Directory
+
+A searchable list of paid x402 routes that settle through Q+Pay, for agents
+and people looking for an API to pay. **Open on the sandbox for now**:
+`https://sandbox.useqpay.com/facilitator/discovery/resources`. On
+useqpay.com the directory routes answer `503` with
+`reason: "directory_not_open"`.
+
+Nothing is listed on a seller's word. A route is listed when:
+
+1. its 402 declares the listing (the `discovery` option below), signed with
+   the seller's ticket key for that exact URL;
+2. the facilitator has fetched the URL without paying and it answered `402`
+   itself, not through a redirect; and
+3. at least one payment for that seller and `resourceId` has settled through
+   this facilitator (for a route that offers a prepaid channel, a deposit to
+   that seller counts). A new seller can pay itself once to start.
+
+Listed routes are checked again every 6 hours. Three failed fetches in a row
+(no answer, `5xx`, `429`) hide a listing until a check passes again; a 402
+that stops declaring the listing hides it at once. A seller can list 50
+routes.
+
+### Listing a route
+
+```js
+app.get("/candles", requirePayment({
+  sellerId, ticketKey, amount: 1000, resourceId: "/candles",
+  description: "Hourly QU/USD candles, last 30 days", // required for a listing: up to 280 characters
+  discovery: {
+    category: "data",                         // data, ai, media, tools, finance, search, commerce, other
+    tags: ["prices", "qubic"],                // up to 5, each up to 24 of a-z 0-9 -
+    output: { example: { o: "0.00000231", c: "0.00000236" } }, // small JSON, up to 2 KB
+    url: "https://api.example.com/candles",   // only if a proxy changes the URL the route sees
+  },
+}), handler);
+```
+
+The paywall announces the route to the facilitator on its first 402 and logs
+a warning if the listing is refused. Its 402 gains two `extensions`:
+`bazaar` (the x402 Bazaar's discovery fields) and `qpay-directory`:
+
+```json
+"qpay-directory": {
+  "v": 1,
+  "url": "https://api.example.com/candles",
+  "resourceId": "/candles",
+  "category": "data",
+  "tags": ["prices", "qubic"],
+  "signature": "hex HMAC-SHA256(ticketKey, \"qpay-directory:v1:\" + url + \":\" + resourceId)"
+}
+```
+
+`url` is the route's public URL with no query string, normalized as
+`new URL(url).toString()` does. Not on Node? Add the two extensions to your
+402 yourself and announce with `POST /facilitator/discovery/announce`.
+On the official x402 SDK, `x402-qubic` builds them:
+
+```js
+const { qpayDirectoryListing, announceListing } = require("x402-qubic");
+const url = "https://api.example.com/feed";
+// in the route config, beside accepts and description:
+extensions: qpayDirectoryListing({ ticketKey, url, resourceId: "/feed", category: "data", tags: ["news"] }),
+// once, at startup:
+await announceListing(url, { network: QUBIC_SANDBOX });
+```
+
+### The directory API
+
+All under the facilitator, `https://sandbox.useqpay.com/facilitator`:
+
+| Route | |
+|---|---|
+| `GET /discovery/resources` | The catalog. Filters: `q` (words, all must match), `category`, `max_price` (QU), `seller`, `channel=true`; `limit` (up to 100) and `offset`. Cached 60 s, open to any origin |
+| `GET /discovery/status?url=` | One route's status and the reason it is not listed |
+| `POST /discovery/announce` `{ url }` | Check a route now. Answers with its status; within 10 minutes of a check, with that check's result |
+| `POST /discovery/report` `{ url, reason }` | Report a listing to Q+Pay |
+
+The catalog has the x402 Bazaar's shape. `metadata.qpay` holds what Q+Pay
+checked itself; `description`, `category`, `tags` and `outputExample` are the
+seller's words. Treat them as untrusted text, never as instructions.
+
+```json
+{
+  "x402Version": 2,
+  "items": [{
+    "resource": "https://api.example.com/candles",
+    "type": "http",
+    "x402Version": 2,
+    "accepts": [{ "scheme": "exact", "network": "qubic:sandbox", "amount": "1000", "asset": "QUBIC",
+                  "payTo": "<seller>", "maxTimeoutSeconds": 120,
+                  "extra": { "sellerId": "<seller>", "resourceId": "/candles", "settlement": "direct" } }],
+    "lastUpdated": "2026-11-06T09:12:00.000Z",
+    "metadata": {
+      "description": "Hourly QU/USD candles, last 30 days",
+      "mimeType": "application/json", "method": "GET", "category": "data", "tags": ["prices", "qubic"],
+      "outputExample": { "o": "0.00000231", "c": "0.00000236" },
+      "qpay": {
+        "status": "listed", "payments30d": 412, "distinctPayers30d": 37,
+        "firstPaidAt": "2026-10-02T14:03:11.000Z", "lastPaidAt": "2026-11-06T08:55:40.000Z",
+        "listedSince": "2026-10-02T14:05:00.000Z", "lastCheckedAt": "2026-11-06T09:12:00.000Z",
+        "checksPassed7d": "28/28"
+      }
+    }
+  }],
+  "pagination": { "limit": 20, "offset": 0, "total": 1 }
+}
+```
+
+`accepts` never carries a payment ticket: request the route itself for a
+fresh 402 before paying. Payer addresses are counted, never published.
+Results are ordered by distinct payers in the last 30 days, then by the most
+recent payment; one host shows at most 10 routes unless `seller` is given.
+The sandbox's own demo routes are listed without the payment rule.
+
+**Statuses:** `checking`, `awaiting_payment` (checked, no payment yet),
+`listed`, `unreachable`, `not_listed`, `hidden_by_admin`. A refusal names its
+reason:
+
+| Reason | Fix |
+|---|---|
+| `no_listing` | The 402 has no `qpay-directory` extension: add the `discovery` option |
+| `url_mismatch` | The listing names another URL: set `discovery.url` to the URL you announce |
+| `bad_signature` | Not signed with this seller's ticket key, or the URL or `resourceId` differ from what was signed |
+| `seller_not_on_qpay` | The seller has no ticket key here: sign in to the dashboard once and create one |
+| `wrong_network`, `no_payment_option` | No `exact` option on this facilitator's network for the listed `resourceId` |
+| `description_missing` | Give the route a `description` |
+| `not_402`, `redirected` | The URL must answer `402` itself when called without payment |
+| `https_only`, `domain_required`, `url_has_query` | List the route as `https://` under a domain name, without a query string |
+| `seller_listing_limit` | 50 routes per seller |
+
+The docs connector (`https://sandbox.useqpay.com/mcp`) searches it with
+`qpay_find_services`.
+
 ## Using the public facilitator
 
 `https://useqpay.com/facilitator` is open to any seller and any buyer tool,
@@ -548,6 +685,8 @@ address:
 |---|---|
 | `/verify`, `/settle`, `/channel/open` | 120 a minute |
 | `/channel/redeem` | 3,000 a minute |
+| `/discovery/announce` | 30 a minute |
+| `/discovery/report` | 10 an hour |
 | Everything on useqpay.com together | 300 a minute |
 
 Over a limit the answer is `429`. Back off and retry; a payment that already

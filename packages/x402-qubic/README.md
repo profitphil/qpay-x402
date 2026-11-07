@@ -51,6 +51,29 @@ You need two things from your [Q+Pay dashboard](https://useqpay.com/dashboard): 
 - **`extra.resourceId`** names what a route sells. Give each route its own; it defaults to `"x402"`.
 - **Flow**: the payment is settled before your handler runs, so a payment is served once.
 
+### Listing a route in the Q+Pay Directory
+
+The [Q+Pay Directory](https://useqpay.com/docs/x402#the-qpay-directory) is a searchable list of paid x402 routes on Qubic. It is open on the sandbox for now. Add the listing to the route config and announce the route once:
+
+```js
+const { qpayDirectoryListing, announceListing, QUBIC_SANDBOX } = require("x402-qubic");
+const url = "https://api.example.com/feed"; // the route's exact public URL
+
+app.use(paymentMiddleware({
+  "GET /feed": {
+    accepts: { scheme: "exact", network: QUBIC_SANDBOX, price: "20000 QU", payTo: process.env.QUBIC_ADDRESS, extra: { resourceId: "/feed" } },
+    description: "Market feed", // shown in the directory, up to 280 characters
+    extensions: qpayDirectoryListing({ ticketKey: process.env.QPAY_TICKET_KEY, url, resourceId: "/feed", category: "data", tags: ["markets"] }),
+  },
+}, server));
+
+announceListing(url, { network: QUBIC_SANDBOX }).then((r) => console.log("directory:", r.status, r.reason || ""));
+```
+
+The listing is signed with your ticket key for that URL. The facilitator fetches the route, checks the signature, and lists it once one payment for it has settled through Q+Pay (until then the status is `awaiting_payment`).
+
+The official SDK sends the listing in the `PAYMENT-REQUIRED` header, which makes that header about 1 KB longer. Behind nginx, whose default buffer for all response headers is 4 KB, set `proxy_buffer_size 16k;` for the route, or nginx answers 502 instead of the 402.
+
 ## How it pays
 
 On EVM, an x402 payment is a signed authorization the facilitator executes later. Qubic has no such thing, so this scheme pays directly:

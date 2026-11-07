@@ -10,6 +10,7 @@ const { requirePayment, SCHEME, NETWORK } = require("./src/paywall");
 const { issueTicket, verifyTicket, readNonce } = require("./src/ticket");
 const { createClient } = require("./src/facilitator");
 const { resolvePayTo } = require("./src/payTo");
+const { CATEGORIES: DIRECTORY_CATEGORIES, listingSignature } = require("./src/discovery");
 
 module.exports = {
   requirePayment,
@@ -18,6 +19,8 @@ module.exports = {
   readNonce,
   createClient,
   resolvePayTo,
+  DIRECTORY_CATEGORIES,
+  listingSignature,
   SCHEME,
   NETWORK,
 };

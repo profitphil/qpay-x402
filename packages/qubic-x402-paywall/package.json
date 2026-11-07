@@ -1,6 +1,6 @@
 {
   "name": "qubic-x402-paywall",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Charge per HTTP request in Qubic (QU). Implements the x402 seller side against the Q+Pay facilitator: 402 challenges, anti-front-running tickets, and QPAY contract settlement.",
   "keywords": [
     "x402",

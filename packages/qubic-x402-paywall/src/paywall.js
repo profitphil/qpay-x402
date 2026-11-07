@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const { issueTicket } = require("./ticket");
 const { createClient } = require("./facilitator");
 const { resolvePayTo, settlementName, networkName } = require("./payTo");
+const directory = require("./discovery");
 
 const SCHEME = "exact";
 const NETWORK = "qubic:mainnet";
@@ -23,7 +24,13 @@ const b64json = (obj) => Buffer.from(JSON.stringify(obj), "utf8").toString("base
 const paymentHeader = (req) => req.get("PAYMENT-SIGNATURE") || req.get("X-PAYMENT");
 function send402(res, body) {
   const required = { x402Version: 2, error: body.error, resource: body.resource, accepts: body.accepts };
-  if (body.channel) required.extensions = { "qubic-prepaid-channel": body.channel };
+  // The directory listing stays in the body: with it, a 402 that also offers
+  // a channel outgrows nginx's default 4 KB header buffer, which answers 502.
+  const extensions = { ...(body.extensions || {}) };
+  delete extensions.bazaar;
+  delete extensions[directory.EXTENSION];
+  if (body.channel) extensions["qubic-prepaid-channel"] = body.channel;
+  if (Object.keys(extensions).length) required.extensions = extensions;
   res.set("PAYMENT-REQUIRED", b64json(required));
   // Each 402 carries a single-use ticket: a cached one would hand two buyers
   // the same nonce. The official x402 SDK marks its 402s no-store too.
@@ -51,6 +58,9 @@ const decodeHeader = (value) => {
  * @param {object} channel  { deposit } to also offer a prepaid channel:
  *   the buyer pays `deposit` QU once, then each request spends `amount`
  *   from it with a signed voucher - no transaction per request.
+ * @param {object} discovery  { category, tags, output: { example }, url } to
+ *   list this route in the Q+Pay Directory. `url` is the route's public URL
+ *   when this server sits behind a proxy that changes it. See the README.
  */
 function requirePayment({
   sellerId,
@@ -64,6 +74,7 @@ function requirePayment({
   onPaid,
   channel,
   network: networkOpt,
+  discovery,
 } = {}) {
   if (!sellerId) throw new Error("requirePayment needs sellerId (your Qubic address)");
   if (!ticketKey) throw new Error("requirePayment needs ticketKey (from your Q+Pay dashboard)");
@@ -73,6 +84,29 @@ function requirePayment({
     throw new Error("channel.deposit must be at least the price of one request");
   }
   const client = createClient(facilitatorOpts || {});
+  const listing = directory.normalizeOptions(discovery);
+  // Announced once per URL per process: the facilitator then checks the
+  // route on its own schedule. A failed announcement is only logged.
+  const announced = new Set();
+  function announce(url) {
+    if (!listing.announce || announced.has(url)) return;
+    announced.add(url);
+    client
+      .announce(url)
+      .then((r) => {
+        if (r && r.status && !["listed", "awaiting_payment", "checking"].includes(r.status)) {
+          console.warn(`[qubic-x402-paywall] Q+Pay Directory: ${url} is ${r.status}${r.reason ? ` (${r.reason})` : ""}`);
+        }
+      })
+      .catch((err) => console.warn(`[qubic-x402-paywall] Q+Pay Directory: could not announce ${url}: ${err.message}`));
+  }
+
+  function listingExtensions(req, scope) {
+    if (!listing) return {};
+    const url = listing.url || directory.routeUrl(req);
+    announce(url);
+    return { extensions: directory.buildExtensions(listing, { url, resourceId: scope, ticketKey, mimeType }) };
+  }
 
   return async function paywall(req, res, next) {
     const scope = resourceId || `${req.baseUrl || ""}${req.path}`;
@@ -148,6 +182,7 @@ function requirePayment({
         paymentTicket: ticket.token,
         paymentTicketField: "paymentPayload.payload.ticket",
         channel: channelOffer(),
+        ...listingExtensions(req, scope),
       });
     }
 
