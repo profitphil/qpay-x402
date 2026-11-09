@@ -544,10 +544,11 @@ new x402Client().register(QUBIC_SANDBOX,
 ## The Q+Pay Directory
 
 A searchable list of paid x402 routes that settle through Q+Pay, for agents
-and people looking for an API to pay. **Open on the sandbox for now**:
-`https://sandbox.useqpay.com/facilitator/discovery/resources`. On
-useqpay.com the directory routes answer `503` with
-`reason: "directory_not_open"`.
+and people looking for an API to pay: on mainnet at
+`https://useqpay.com/facilitator/discovery/resources`, and on the sandbox at
+`https://sandbox.useqpay.com/facilitator/discovery/resources`. A self-hosted
+facilitator turns it on with `DIRECTORY_ENABLED=1`; until then its directory
+routes answer `503` with `reason: "directory_not_open"`.
 
 Nothing is listed on a seller's word. A route is listed when:
 

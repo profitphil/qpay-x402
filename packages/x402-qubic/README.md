@@ -53,7 +53,7 @@ You need two things from your [Q+Pay dashboard](https://useqpay.com/dashboard): 
 
 ### Listing a route in the Q+Pay Directory
 
-The [Q+Pay Directory](https://useqpay.com/docs/x402#the-qpay-directory) is a searchable list of paid x402 routes on Qubic. It is open on the sandbox for now. Add the listing to the route config and announce the route once:
+The [Q+Pay Directory](https://useqpay.com/docs/x402#the-qpay-directory) is a searchable list of paid x402 routes on Qubic, on mainnet and on the sandbox. Add the listing to the route config and announce the route once:
 
 ```js
 const { qpayDirectoryListing, announceListing, QUBIC_SANDBOX } = require("x402-qubic");
