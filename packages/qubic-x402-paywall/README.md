@@ -688,11 +688,27 @@ address:
 | `/channel/redeem` | 3,000 a minute |
 | `/discovery/announce` | 30 a minute |
 | `/discovery/report` | 10 an hour |
+| `/metrics` | 120 a minute |
 | Everything on useqpay.com together | 300 a minute |
 
 Over a limit the answer is `429`. Back off and retry; a payment that already
 executed stays settleable for `maxTimeoutSeconds`, so retry `/settle` with the
 same proof rather than paying again.
+
+### Reliability figures
+
+`GET https://useqpay.com/facilitator/metrics?days=30` (or `1`, `7`) reports
+every payment the facilitator was asked to settle: how many succeeded, each
+refusal reason with its count, and durations for successful payments
+(`latencyMs.since402` from the 402 to settled, `latencyMs.settle` for the
+facilitator's own check, `latencyMs.voucher` for a prepaid call). Counts and
+durations only, never a payer or an amount. The same figures are on
+[useqpay.com/stats](https://useqpay.com/stats).
+
+To measure the whole journey yourself, `scripts/x402-journey.js` in the Q+Pay
+repository pays, serves and reconciles a route N times and reports success
+rate and timings: free on the sandbox, real QU on mainnet with `--mainnet
+--max-qu`.
 
 ## Invoices
 
